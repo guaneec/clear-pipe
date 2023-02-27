@@ -2,3 +2,5 @@ venv/
 *.egg-info
 *.ipynb
 __pycache__
+*.ckpt
+*.safetensors
