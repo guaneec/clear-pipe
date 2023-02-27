@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "clear-pipe"
+version = "0.1.0"
+dependencies = [
+    "torch",
+    "diffusers[torch]",
+    "transformers",
+    "safetensors",
+    "omegaconf",
+    "pytorch_lightning",
+    "jsonargparse[signatures]",
+    "wandb",
+    "tensorboard",
+    "dadaptation",
+]
+
+[project.optional-dependencies]
+dev = ["ipykernel", "black"]

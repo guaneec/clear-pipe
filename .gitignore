@@ -1,0 +1,4 @@
+venv/
+*.egg-info
+*.ipynb
+__pycache__
