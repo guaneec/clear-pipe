@@ -223,13 +223,9 @@ class StableDiffusion(torch.nn.Module):
 
         if output_type == "latent":
             image = latents
-            has_nsfw_concept = None
         elif output_type == "pil":
             # 8. Post-processing
             image = self.decode_latents(latents)
-
-            # 9. Run safety checker
-            image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
 
             # 10. Convert to PIL
             image = self.numpy_to_pil(image)
@@ -237,14 +233,7 @@ class StableDiffusion(torch.nn.Module):
             # 8. Post-processing
             image = self.decode_latents(latents)
 
-            # 9. Run safety checker
-            image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
-
         # Offload last model to CPU
         if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
             self.final_offload_hook.offload()
 
-        if not return_dict:
-            return (image, has_nsfw_concept)
-
-        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)
