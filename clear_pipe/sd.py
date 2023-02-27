@@ -236,4 +236,4 @@ class StableDiffusion(torch.nn.Module):
         # Offload last model to CPU
         if hasattr(self, "final_offload_hook") and self.final_offload_hook is not None:
             self.final_offload_hook.offload()
-
+        return image
