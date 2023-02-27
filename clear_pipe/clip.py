@@ -351,7 +351,7 @@ class PatchedCLIPTextModel(torch.nn.Module):
         return z
 
     def encode_with_transformers(self, tokens):
-        return self.text_model(tokens.to(next(self.text_model.parameters()))).last_hidden_state
+        return self.text_model(tokens.to(next(self.text_model.parameters()).device)).last_hidden_state
     
 
     def process_texts(self, texts):
