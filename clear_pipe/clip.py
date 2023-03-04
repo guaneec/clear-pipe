@@ -180,7 +180,7 @@ class EmbeddingDatabase(torch.nn.Module):
 
 
 class PatchedCLIPTextModel(torch.nn.Module):
-    def __init__(self, tokenizer, text_model, embed_db: EmbeddingDatabase):
+    def __init__(self, tokenizer, text_model, embed_db: EmbeddingDatabase, penultimate: bool = False):
         super().__init__()
         self.tokenizer = tokenizer
         self.comma_token = [v for k, v in tokenizer.encoder.items() if k == ",</w>"][0]
@@ -190,6 +190,7 @@ class PatchedCLIPTextModel(torch.nn.Module):
         self.chunk_length = 75
         self.db = embed_db
         self.text_model = text_model
+        self.penultimate = False
 
     def tokenize_line(self, line):
         """
@@ -351,7 +352,13 @@ class PatchedCLIPTextModel(torch.nn.Module):
         return z
 
     def encode_with_transformers(self, tokens):
-        return self.text_model(tokens.to(next(self.text_model.parameters()).device)).last_hidden_state
+        dev = next(self.text_model.parameters()).device
+        if not self.penultimate:
+            return self.text_model(tokens.to(dev)).last_hidden_state
+        # penultimate only applies on sd1 openai-clip with 12 layers
+        assert self.text_model.num_hidden_layers == 12
+        c = self.text_model(tokens.to(dev), output_hidden_states=True).hidden_states[-2]
+        return self.text_model.final_layer_norm(c)
     
 
     def process_texts(self, texts):

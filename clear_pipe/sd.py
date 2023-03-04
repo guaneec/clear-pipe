@@ -1,7 +1,7 @@
 from typing import *
 import torch
 from contextlib import contextmanager
-
+from clear_pipe.clip import PatchedCLIPTextModel, EmbeddingDatabase
 
 @contextmanager
 def patched(victim, prop, new_prop):
@@ -18,12 +18,12 @@ class StableDiffusion(torch.nn.Module):
         hf_pretrained: Optional[str] = None,
         ckpt_path: Optional[str] = None,
         embedding_list: Optional[List[str]] = None,
-        embedding_length: int = 1,
-        embedding_init: Optional[str] = None,
+        embedding_length: int = 8,
+        sdv1_clip_penultimate: bool = False,
     ):
         super().__init__()
         if sum([hf_pretrained is None, ckpt_path is None]) != 1:
-            raise ValueError("Exepcting 1 of hf_pretrained and ckpt_path")
+            raise ValueError("Exepcted exactly 1 of: hf_pretrained, ckpt_path")
         if hf_pretrained is not None:
             from diffusers import StableDiffusionPipeline
 
@@ -45,6 +45,11 @@ class StableDiffusion(torch.nn.Module):
         self.vae = self.pipe.vae
         self.text_encoder = self.pipe.text_encoder
         self.unet = self.pipe.unet
+        self.db = EmbeddingDatabase()
+        zero_emb = torch.zeros_like(self.text_encoder.text_model.embeddings.token_embedding.weight[:embedding_length])
+        for name in embedding_list:
+            self.db.register_embedding(name, zero_emb, self.pipe.tokenizer)
+        self.patched_clip = PatchedCLIPTextModel(self.pipe.tokenizer, self.text_encoder, self.db)
 
     @torch.no_grad()
     def __call__(

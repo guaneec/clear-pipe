@@ -6,7 +6,8 @@ from pytorch_lightning.cli import LightningCLI, LightningArgumentParser
 from transformers import CLIPTextModel, CLIPTokenizer
 from clear_pipe.sd import StableDiffusion
 from clear_pipe.data import ClearDataModule
-
+import re
+import wandb
 
 class HiddenModule:
     def __init__(self, module):
@@ -35,9 +36,6 @@ class StableDiffusionTuner(pl.LightningModule):
         self,
         *,
         sd: StableDiffusion,
-        optimizer: Callable[[Iterable], torch.optim.Optimizer] = Namespace(
-            class_path="DAdaptAdam"
-        ),
         embedding_lr: float = 1.0,
         model_lr: float = 1.0,
         model_unfrozen_regex: str = r"2.to_[kv]",
@@ -45,16 +43,17 @@ class StableDiffusionTuner(pl.LightningModule):
         log_random_image: bool = True,
         log_image_every_nsteps: int = 0,
         export_every_nsteps: int = 0,
+        optimizer_params: Optional[dict],
     ):
         super().__init__()
 
-        self.embeds = torch.nn.ParameterDict()
+        self.embeds = sd.db
         self.model_weights = torch.nn.ModuleDict()
-        for k, v in shared.sd_model.named_modules():
+        for k, v in sd.named_modules():
             if model_unfrozen_regex and re.search(model_unfrozen_regex, k):
                 module_path, _dot, kp = k.rpartition(".")
                 assert type(v) == torch.nn.Linear
-                parent = shared.sd_model.get_submodule(module_path)
+                parent = sd.get_submodule(module_path)
                 self.model_weights[k.replace(".", ">")] = DeltaLinear(v)
                 setattr(parent, kp, self.model_weights[k.replace(".", ">")])
 
@@ -64,28 +63,14 @@ class StableDiffusionTuner(pl.LightningModule):
         self.model_lr = model_lr
         self.log_image_every_nsteps = log_image_every_nsteps
         self.export_every_nsteps = export_every_nsteps
-        self.optimzer = optimizer
+        self.sd = HiddenModule(sd)
+        self.optimizer_params = optimizer_params
+        wandb.init(project="tuning")
 
     def _gen_image(self, **kwargs):
-        from modules import processing, shared
-
         print("prompt:", kwargs["prompt"])
-        p = processing.StableDiffusionProcessingTxt2Img(
-            sd_model=shared.sd_model,
-            do_not_save_grid=True,
-            do_not_save_samples=True,
-            do_not_reload_embeddings=True,
-            width=512,
-            height=512,
-            steps=20,
-            sampler_name="DPM++ 2M",
-            **kwargs,
-        )
         with torch.random.fork_rng():
-            processed = processing.process_images(p)
-        image = processed.images[0]
-        p.close()
-        shared.total_tqdm.clear()
+            image = self.sd.module(**kwargs)[0]
         return image
 
     def _log_image(self, prompt: str):
@@ -136,12 +121,12 @@ class StableDiffusionTuner(pl.LightningModule):
         save_file(tensors, path, {"tuner": json.dumps(metadata)})
 
     def training_step(self, batch, batch_idx):
-        from modules import shared
-
-        with shared.devices.autocast():
-            x = batch.latent_sample.to(shared.devices.device, non_blocking=False)
-            c = shared.sd_model.cond_stage_model(batch.cond_text)
-            loss = shared.sd_model(x, c)[0]
+        x = batch.latent
+        c = self.sd.module.patched_clip(batch.cond_text)
+        b = len(x)
+        t = torch.randint(0, 1000, (b,)).long()
+        model_pred = self.sd.module.unet(noisy_latents, timesteps, encoder_hidden_states).sample
+        loss = shared.sd_model(x, c)[0]
         self.log("loss/train", loss.item())
         if (
             self.log_image_every_nsteps
@@ -182,6 +167,7 @@ class ClearCLI(LightningCLI):
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         parser.add_class_arguments(StableDiffusion, "sd")
         parser.link_arguments("sd", "model.sd", apply_on="instantiate")
+        parser.link_arguments("sd", "data.sd", apply_on="instantiate")
 
 
 if __name__ == "__main__":

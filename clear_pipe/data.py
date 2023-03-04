@@ -8,7 +8,7 @@ import tqdm
 from PIL import Image
 import torch
 import numpy as np
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import random
 
 
@@ -16,12 +16,12 @@ import random
 class DatasetEntry:
     filetext: str
     placeholder: str
-    text_templates: List[str] = ["[filewords]"]
+    text_templates: List[str] = field(default_factory=lambda: ["[filewords]"])
     npimage: Optional[np.ndarray] = None
     latent: Optional[torch.Tensor] = None
     shuffle_tags: bool = False
 
-    def _get_latent(self, vae):
+    def get_latent(self, vae):
         if self.latent is not None:
             return self.latent
         torchdata = torch.from_numpy(self.npimage).permute(2, 0, 1)
@@ -31,7 +31,7 @@ class DatasetEntry:
         )
         return self.latent
 
-    def _get_text(self):
+    def get_text(self):
         text = random.choice(self.lines)
         tags = self.filetext.split(",")
         if self.tag_drop_out != 0:
@@ -41,9 +41,6 @@ class DatasetEntry:
         text = text.replace("[filewords]", ",".join(tags))
         text = text.replace("[name]", self.placeholder)
         return text
-
-    def get_latent_text(self, vae):
-        return self._get_latent(vae), self._get_text()
 
 
 class ClearDataset(Dataset):
@@ -89,7 +86,7 @@ class ClearDataset(Dataset):
             npimage = (npimage / 127.5 - 1.0).astype(np.float32)
 
             entry = DatasetEntry(
-                filewords=filename_text,
+                filetext=filename_text,
                 placeholder=placeholder,
                 text_templates=text_templates,
                 npimage=npimage,
@@ -98,15 +95,20 @@ class ClearDataset(Dataset):
             groups[image.size].append(len(self.dataset))
             self.dataset.append(entry)
 
-        self.length = len(self.dataset)
         self.groups = list(groups.values())
-        assert self.length > 0, "No images have been found in the dataset."
+        assert self.dataset, "No images have been found in the dataset."
 
         if len(groups) > 1:
             print("Buckets:")
             for (w, h), ids in sorted(groups.items(), key=lambda x: x[0]):
                 print(f"  {w}x{h}: {len(ids)}")
             print()
+
+    def __getitem__(self, index):
+        return self.dataset[index]
+
+    def __len__(self):
+        return len(self.dataset)
 
 
 class GroupedBatchSampler(Sampler):
@@ -145,13 +147,28 @@ class GroupedBatchSampler(Sampler):
         yield from batches
 
 
+class BatchLoader:
+    def __init__(self, data: List[DatasetEntry], vae):
+        self.cond_text = [entry.get_text() for entry in data]
+        self.latent = torch.stack([entry.get_latent(vae) for entry in data]).squeeze(1)
+
+    def pin_memory(self):
+        self.latent = self.latent.pin_memory()
+        return self
+
+
 class ClearDataModule(pl.LightningDataModule):
-    def __init__(self, *, data_root: str, placeholder: str, batch_size: int) -> None:
+    def __init__(
+        self, *, data_root: str, placeholder: str, batch_size: int, sd: StableDiffusion
+    ) -> None:
         super().__init__()
         self.data_root = data_root
         self.dataset = ClearDataset(data_root=self.data_root, placeholder=placeholder)
         self.batch_size = batch_size
+        self.vae = sd.vae
 
     def train_dataloader(self):
         sampler = GroupedBatchSampler(self.dataset, self.batch_size)
-        return DataLoader(self.dataset, sampler=sampler)
+        return DataLoader(
+            self.dataset, sampler=sampler, collate_fn=lambda d: BatchLoader(d, self.vae)
+        )
