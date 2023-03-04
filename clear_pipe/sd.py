@@ -1,14 +1,7 @@
 from typing import *
 import torch
-from contextlib import contextmanager
 from clear_pipe.clip import PatchedCLIPTextModel, EmbeddingDatabase
-
-@contextmanager
-def patched(victim, prop, new_prop):
-    orig = getattr(victim, prop)
-    setattr(victim, prop, new_prop)
-    yield
-    setattr(victim, prop, orig)
+from clear_pipe.util import patched
 
 
 class StableDiffusion(torch.nn.Module):

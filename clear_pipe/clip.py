@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 import torch
 import re
 
+from clear_pipe.util import patched
+
 comma_padding_backtrack = 20
 
 re_attention = re.compile(
@@ -144,6 +146,39 @@ chunk. Thos objects are found in PromptChunk.fixes and, are placed into FrozenCL
 are applied by sd_hijack.EmbeddingsWithFixes's forward function."""
 
 
+class EmbeddingsWithFixes(torch.nn.Module):
+    def __init__(self, wrapped, fixes):
+        super().__init__()
+        self.wrapped = wrapped
+        self.fixes = fixes
+
+    def forward(self, input_ids):
+        inputs_embeds = self.wrapped(input_ids)
+
+        if (
+            self.fixes is None
+            or len(self.fixes) == 0
+            or max([len(x) for x in self.fixes]) == 0
+        ):
+            return inputs_embeds
+
+        vecs = []
+        for fixes, tensor in zip(self.fixes, inputs_embeds):
+            for offset, emb in fixes:
+                emb_len = min(tensor.shape[0] - offset - 1, emb.shape[0])
+                tensor = torch.cat(
+                    [
+                        tensor[0 : offset + 1],
+                        emb[0:emb_len],
+                        tensor[offset + 1 + emb_len :],
+                    ]
+                )
+
+            vecs.append(tensor)
+
+        return torch.stack(vecs)
+
+
 class EmbeddingDatabase(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -180,7 +215,13 @@ class EmbeddingDatabase(torch.nn.Module):
 
 
 class PatchedCLIPTextModel(torch.nn.Module):
-    def __init__(self, tokenizer, text_model, embed_db: EmbeddingDatabase, penultimate: bool = False):
+    def __init__(
+        self,
+        tokenizer,
+        text_model,
+        embed_db: EmbeddingDatabase,
+        penultimate: bool = False,
+    ):
         super().__init__()
         self.tokenizer = tokenizer
         self.comma_token = [v for k, v in tokenizer.encoder.items() if k == ",</w>"][0]
@@ -190,7 +231,7 @@ class PatchedCLIPTextModel(torch.nn.Module):
         self.chunk_length = 75
         self.db = embed_db
         self.text_model = text_model
-        self.penultimate = False
+        self.penultimate = penultimate
 
     def tokenize_line(self, line):
         """
@@ -316,13 +357,14 @@ class PatchedCLIPTextModel(torch.nn.Module):
 
             tokens = [x.tokens for x in batch_chunk]
             multipliers = [x.multipliers for x in batch_chunk]
+            fixes = [x.fixes for x in batch_chunk]
 
-            z = self.process_tokens(tokens, multipliers)
+            z = self.process_tokens(tokens, multipliers, fixes)
             zs.append(z)
 
         return torch.hstack(zs)
 
-    def process_tokens(self, remade_batch_tokens, batch_multipliers):
+    def process_tokens(self, remade_batch_tokens, batch_multipliers, fixes):
         """
         sends one single prompt chunk to be encoded by transformers neural network.
         remade_batch_tokens is a batch of tokens - a list, where every element is a list of tokens; usually
@@ -338,7 +380,11 @@ class PatchedCLIPTextModel(torch.nn.Module):
                 index = remade_batch_tokens[batch_pos].index(self.id_end)
                 tokens[batch_pos, index + 1 : tokens.shape[1]] = self.id_pad
 
-        z = self.encode_with_transformers(tokens)
+        te = self.text_model.text_model.embeddings
+        with patched(
+            te, "token_embedding", EmbeddingsWithFixes(te.token_embeddings, fixes)
+        ):
+            z = self.encode_with_transformers(tokens)
 
         # restoring original mean is likely not correct, but it seems to work well to prevent artifacts that happen otherwise
         batch_multipliers = torch.asarray(batch_multipliers).to(z.device)
@@ -356,10 +402,9 @@ class PatchedCLIPTextModel(torch.nn.Module):
         if not self.penultimate:
             return self.text_model(tokens.to(dev)).last_hidden_state
         # penultimate only applies on sd1 openai-clip with 12 layers
-        assert self.text_model.num_hidden_layers == 12
+        assert self.text_model.config.num_hidden_layers == 12
         c = self.text_model(tokens.to(dev), output_hidden_states=True).hidden_states[-2]
         return self.text_model.final_layer_norm(c)
-    
 
     def process_texts(self, texts):
         """
