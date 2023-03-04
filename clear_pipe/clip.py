@@ -151,7 +151,7 @@ class EmbeddingDatabase(torch.nn.Module):
         self.ids_lookup = {}
 
     def register_embedding(self, name, init, tokenizer):
-        self.word_embeddings[name] = init.detach().clone()
+        init = self.word_embeddings[name] = init.detach().clone()
 
         ids = tokenizer(name, add_special_tokens=False).input_ids
 

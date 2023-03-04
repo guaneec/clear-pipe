@@ -46,10 +46,12 @@ class StableDiffusion(torch.nn.Module):
         self.text_encoder = self.pipe.text_encoder
         self.unet = self.pipe.unet
         self.db = EmbeddingDatabase()
-        zero_emb = torch.zeros_like(self.text_encoder.text_model.embeddings.token_embedding.weight[:embedding_length])
+        emb_std = self.pipe.text_encoder.text_model.embeddings.token_embedding.weight.float().std().item()
+        emb_mean = self.pipe.text_encoder.text_model.embeddings.token_embedding.weight.float().mean().item()
         for name in embedding_list:
-            self.db.register_embedding(name, zero_emb, self.pipe.tokenizer)
-        self.patched_clip = PatchedCLIPTextModel(self.pipe.tokenizer, self.text_encoder, self.db)
+            rand_emb = torch.randn_like(self.text_encoder.text_model.embeddings.token_embedding.weight[:embedding_length]) * emb_std + emb_mean
+            self.db.register_embedding(name, rand_emb, self.pipe.tokenizer)
+        self.patched_clip = PatchedCLIPTextModel(self.pipe.tokenizer, self.text_encoder, self.db, penultimate=sdv1_clip_penultimate)
 
     @torch.no_grad()
     def __call__(
