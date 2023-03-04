@@ -38,7 +38,7 @@ class StableDiffusion(torch.nn.Module):
         self.vae = self.pipe.vae
         self.text_encoder = self.pipe.text_encoder
         self.unet = self.pipe.unet
-        self.db = EmbeddingDatabase()
+        self.db = EmbeddingDatabase().to(self.pipe.text_encoder.text_model.embeddings.token_embedding.weight)
         emb_std = self.pipe.text_encoder.text_model.embeddings.token_embedding.weight.float().std().item()
         emb_mean = self.pipe.text_encoder.text_model.embeddings.token_embedding.weight.float().mean().item()
         for name in embedding_list:
