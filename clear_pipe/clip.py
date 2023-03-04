@@ -183,7 +183,7 @@ class EmbeddingDatabase(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.word_embeddings = torch.nn.ParameterDict()
-        self.ids_lookup = torch.nn.ParameterDict()
+        self.ids_lookup = {}
 
     def register_embedding(self, name, init, tokenizer):
         init = self.word_embeddings[name] = init.detach().clone()
@@ -195,7 +195,7 @@ class EmbeddingDatabase(torch.nn.Module):
             self.ids_lookup[first_id] = []
 
         self.ids_lookup[first_id] = sorted(
-            self.ids_lookup[first_id] + [(ids, init)],
+            self.ids_lookup[first_id] + [(ids, name)],
             key=lambda x: len(x[0]),
             reverse=True,
         )
@@ -207,9 +207,9 @@ class EmbeddingDatabase(torch.nn.Module):
         if possible_matches is None:
             return None, None
 
-        for ids, embedding in possible_matches:
+        for ids, name in possible_matches:
             if tokens[offset : offset + len(ids)] == ids:
-                return embedding, len(ids)
+                return self.word_embeddings[name], len(ids)
 
         return None, None
 
