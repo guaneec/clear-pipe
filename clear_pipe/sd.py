@@ -41,6 +41,7 @@ class StableDiffusion(torch.nn.Module):
         tew = self.pipe.text_encoder.text_model.embeddings.token_embedding.weight
         emb_std = tew.float().std().item()
         emb_mean = tew.float().mean().item()
+        self.db = EmbeddingDatabase()
         for name in embedding_list:
             rand_emb = torch.randn_like(tew[:embedding_length]).to(tew) * emb_std + emb_mean
             self.db.register_embedding(name, rand_emb, self.pipe.tokenizer)
