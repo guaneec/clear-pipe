@@ -44,12 +44,11 @@ class StableDiffusionTuner(pl.LightningModule):
         embedding_lr: float = 1.0,
         model_lr: float = 1.0,
         model_unfrozen_regex: str = r"2.to_[kv]",
-        fixed_image_log_params: Optional[dict],
+        fixed_image_log_params: Optional[dict] = None,
         log_random_image: bool = True,
         log_image_every_nsteps: int = 0,
         export_every_nsteps: int = 0,
-        optimizer: Callable[[Iterable], Optimizer],
-        optimizer_params: Optional[dict],
+        optimizer_params: Optional[dict] = None,
     ):
         super().__init__()
 
@@ -70,9 +69,8 @@ class StableDiffusionTuner(pl.LightningModule):
         self.log_image_every_nsteps = log_image_every_nsteps
         self.export_every_nsteps = export_every_nsteps
         self.sd = HiddenModule(sd)
-        self.optimizer = optimizer
-        self.optimizer_params = optimizer_params
-        wandb.init(project="tuning")
+        self.optimizer_params = optimizer_params or {}
+        # wandb.init(project="tuning")
 
     def _gen_image(self, **kwargs):
         print("prompt:", kwargs["prompt"])
@@ -168,7 +166,7 @@ class StableDiffusionTuner(pl.LightningModule):
         param_groups = []
         if self.embeds:
             param_groups.append(
-                dict(params=list(self.embeds.values()), lr=self.embedding_lr)
+                dict(params=list(self.sd.module.db.parameters()), lr=self.embedding_lr)
             )
         if self.model_weights:
             param_groups.append(

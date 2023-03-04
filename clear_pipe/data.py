@@ -32,10 +32,8 @@ class DatasetEntry:
         return self.latent
 
     def get_text(self):
-        text = random.choice(self.lines)
+        text = random.choice(self.text_templates)
         tags = self.filetext.split(",")
-        if self.tag_drop_out != 0:
-            tags = [t for t in tags if random.random() > self.tag_drop_out]
         if self.shuffle_tags:
             random.shuffle(tags)
         text = text.replace("[filewords]", ",".join(tags))
@@ -48,11 +46,11 @@ class ClearDataset(Dataset):
         self,
         *,
         data_root: str,
-        placeholder: Optional[str] = None,
-        text_templates: Optional[List[str]] = None,
+        text_templates: List[str],
         shuffle_tags: bool = False,
+        placeholder: str = "",
     ):
-        self.placeholder = placeholder or ""
+        self.placeholder = placeholder
         self.dataset = []
 
         assert data_root, "dataset directory not specified"
@@ -159,16 +157,30 @@ class BatchLoader:
 
 class ClearDataModule(pl.LightningDataModule):
     def __init__(
-        self, *, data_root: str, placeholder: str, batch_size: int, sd: StableDiffusion
+        self,
+        *,
+        data_root: str,
+        placeholder: str = "",
+        batch_size: int,
+        sd: StableDiffusion,
+        shuffle_tags: bool = False,
+        text_templates: List[str],
     ) -> None:
         super().__init__()
         self.data_root = data_root
-        self.dataset = ClearDataset(data_root=self.data_root, placeholder=placeholder)
+        self.dataset = ClearDataset(
+            data_root=self.data_root,
+            placeholder=placeholder,
+            shuffle_tags=shuffle_tags,
+            text_templates=text_templates,
+        )
         self.batch_size = batch_size
         self.vae = sd.vae
 
     def train_dataloader(self):
         sampler = GroupedBatchSampler(self.dataset, self.batch_size)
         return DataLoader(
-            self.dataset, sampler=sampler, collate_fn=lambda d: BatchLoader(d, self.vae)
+            self.dataset,
+            batch_sampler=sampler,
+            collate_fn=lambda d: BatchLoader(d, self.vae),
         )

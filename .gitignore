@@ -5,3 +5,5 @@ __pycache__
 *.ckpt
 *.safetensors
 repos/
+wandb/
+lightning_logs/

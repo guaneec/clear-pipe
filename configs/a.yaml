@@ -1,0 +1,21 @@
+model:
+  fixed_image_log_params:
+    seed: 87
+    negative_prompt: "worst quality"
+  log_image_every_nsteps: 200
+data:
+  data_root: 'C:\Users\guane\Documents\workspace\sc\arisu'
+  batch_size: 1
+  text_templates:
+   - "[filewords], [name]"
+
+sd:
+  ckpt_path: 'C:\stable-diffusion-webui\models\Stable-diffusion\animefull-final-pruned.ckpt'
+  embedding_list:
+    - "foo"
+  embedding_length: 16
+
+trainer:
+  accelerator: auto
+
+optimizer: AdamW
