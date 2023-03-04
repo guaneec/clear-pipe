@@ -183,7 +183,7 @@ class EmbeddingDatabase(torch.nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.word_embeddings = torch.nn.ParameterDict()
-        self.ids_lookup = {}
+        self.ids_lookup = torch.nn.ParameterDict()
 
     def register_embedding(self, name, init, tokenizer):
         init = self.word_embeddings[name] = init.detach().clone()
