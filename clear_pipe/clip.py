@@ -334,6 +334,14 @@ class PatchedCLIPTextModel(torch.nn.Module):
 
         return chunks, token_count
 
+    def empty_chunk(self):
+        """creates an empty PromptChunk and returns it"""
+
+        chunk = PromptChunk()
+        chunk.tokens = [self.id_start] + [self.id_end] * (self.chunk_length + 1)
+        chunk.multipliers = [1.0] * (self.chunk_length + 2)
+        return chunk
+
     def forward(self, texts):
         """
         Accepts an array of texts; Passes texts through transformers network to create a tensor with numerical representation of those texts.
