@@ -225,9 +225,9 @@ class PatchedCLIPTextModel(torch.nn.Module):
         super().__init__()
         self.tokenizer = tokenizer
         self.comma_token = [v for k, v in tokenizer.encoder.items() if k == ",</w>"][0]
-        self.id_start = tokenizer.encoder["<|startoftext|>"]
-        self.id_end = tokenizer.encoder["<|endoftext|>"]
-        self.id_pad = 0
+        self.id_start = tokenizer.bos_token_id
+        self.id_end = tokenizer.eos_token_id
+        self.id_pad = tokenizer.pad_token_id
         self.chunk_length = 75
         self.db = embed_db
         self.text_model = text_model
