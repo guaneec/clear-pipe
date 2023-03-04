@@ -382,7 +382,7 @@ class PatchedCLIPTextModel(torch.nn.Module):
 
         te = self.text_model.text_model.embeddings
         with patched(
-            te, "token_embedding", EmbeddingsWithFixes(te.token_embeddings, fixes)
+            te, "token_embedding", EmbeddingsWithFixes(te.token_embedding, fixes)
         ):
             z = self.encode_with_transformers(tokens)
 
