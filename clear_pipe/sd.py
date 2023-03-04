@@ -2,7 +2,7 @@ from typing import *
 import torch
 from clear_pipe.clip import PatchedCLIPTextModel, EmbeddingDatabase
 from clear_pipe.util import patched
-
+from diffusers import DDIMScheduler, PNDMScheduler
 
 class StableDiffusion(torch.nn.Module):
     def __init__(
@@ -46,6 +46,9 @@ class StableDiffusion(torch.nn.Module):
             rand_emb = torch.randn_like(tew[:embedding_length]).to(tew) * emb_std + emb_mean
             self.db.register_embedding(name, rand_emb, self.pipe.tokenizer)
         self.patched_clip = PatchedCLIPTextModel(self.pipe.tokenizer, self.text_encoder, self.db, penultimate=sdv1_clip_penultimate)
+        is_sd2 = tew.shape[1] == 1024
+        sched_class, sched_path = (DDIMScheduler, 'stabilityai/stable-diffusion-2-1') if is_sd2 else (PNDMScheduler, 'CompVis/stable-diffusion-v1-4')
+        self.noise_scheduler = sched_class.from_pretrained(sched_path, subfolder='scheduler')
 
     @torch.no_grad()
     def __call__(

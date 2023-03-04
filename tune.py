@@ -6,8 +6,13 @@ from pytorch_lightning.cli import LightningCLI, LightningArgumentParser
 from transformers import CLIPTextModel, CLIPTokenizer
 from clear_pipe.sd import StableDiffusion
 from clear_pipe.data import ClearDataModule
+from clear_pipe.util import decompose
 import re
 import wandb
+import torch.nn.functional as F
+from torch.optim import Optimizer
+import os
+
 
 class HiddenModule:
     def __init__(self, module):
@@ -43,6 +48,7 @@ class StableDiffusionTuner(pl.LightningModule):
         log_random_image: bool = True,
         log_image_every_nsteps: int = 0,
         export_every_nsteps: int = 0,
+        optimizer: Callable[[Iterable], Optimizer],
         optimizer_params: Optional[dict],
     ):
         super().__init__()
@@ -64,6 +70,7 @@ class StableDiffusionTuner(pl.LightningModule):
         self.log_image_every_nsteps = log_image_every_nsteps
         self.export_every_nsteps = export_every_nsteps
         self.sd = HiddenModule(sd)
+        self.optimizer = optimizer
         self.optimizer_params = optimizer_params
         wandb.init(project="tuning")
 
@@ -121,12 +128,23 @@ class StableDiffusionTuner(pl.LightningModule):
         save_file(tensors, path, {"tuner": json.dumps(metadata)})
 
     def training_step(self, batch, batch_idx):
-        x = batch.latent
+        latents = batch.latent
         c = self.sd.module.patched_clip(batch.cond_text)
-        b = len(x)
-        t = torch.randint(0, 1000, (b,)).long()
-        model_pred = self.sd.module.unet(noisy_latents, timesteps, encoder_hidden_states).sample
-        loss = shared.sd_model(x, c)[0]
+        b = len(latents)
+        timesteps = torch.randint(0, 1000, (b,)).long()
+        noise = torch.randn_like(latents)
+        noise_scheduler = self.sd.module.noise_scheduler
+        noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+        model_pred = self.sd.module.unet(noisy_latents, timesteps, c).sample
+        if noise_scheduler.config.prediction_type == "epsilon":
+            target = noise
+        elif noise_scheduler.config.prediction_type == "v_prediction":
+            target = noise_scheduler.get_velocity(latents, noise, timesteps)
+        else:
+            raise ValueError(
+                f"Unknown prediction type {noise_scheduler.config.prediction_type}"
+            )
+        loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
         self.log("loss/train", loss.item())
         if (
             self.log_image_every_nsteps
