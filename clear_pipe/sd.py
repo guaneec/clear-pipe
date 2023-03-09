@@ -51,7 +51,7 @@ class StableDiffusion(torch.nn.Module):
         self.noise_scheduler = sched_class.from_pretrained(sched_path, subfolder='scheduler')
 
     @torch.no_grad()
-    def __call__(
+    def txt2img(
         self,
         prompt: Union[str, List[str]] = None,
         height: Optional[int] = None,
@@ -63,8 +63,6 @@ class StableDiffusion(torch.nn.Module):
         eta: float = 0.0,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.FloatTensor] = None,
-        prompt_embeds: Optional[torch.FloatTensor] = None,
-        negative_prompt_embeds: Optional[torch.FloatTensor] = None,
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
@@ -140,14 +138,14 @@ class StableDiffusion(torch.nn.Module):
             list of `bool`s denoting whether the corresponding generated image likely represents "not-safe-for-work"
             (nsfw) content, according to the `safety_checker`.
         """
-        self = self.pipe
+        sd, self = self, self.pipe
         # 0. Default height and width to unet
         height = height or self.unet.config.sample_size * self.vae_scale_factor
         width = width or self.unet.config.sample_size * self.vae_scale_factor
 
         # 1. Check inputs. Raise error if not correct
         self.check_inputs(
-            prompt, height, width, callback_steps, negative_prompt, prompt_embeds, negative_prompt_embeds
+            prompt, height, width, callback_steps, negative_prompt, None, None
         )
 
         # 2. Define call parameters
@@ -165,15 +163,7 @@ class StableDiffusion(torch.nn.Module):
         do_classifier_free_guidance = guidance_scale > 1.0
 
         # 3. Encode input prompt
-        prompt_embeds = self._encode_prompt(
-            prompt,
-            device,
-            num_images_per_prompt,
-            do_classifier_free_guidance,
-            negative_prompt,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-        )
+        prompt_embeds = sd.patched_clip([negative_prompt, prompt])
 
         # 4. Prepare timesteps
         self.scheduler.set_timesteps(num_inference_steps, device=device)

@@ -24,11 +24,12 @@ class DatasetEntry:
     def get_latent(self, vae):
         if self.latent is not None:
             return self.latent
-        torchdata = torch.from_numpy(self.npimage).permute(2, 0, 1)
-        self.latent = (
-            vae.encode(torchdata).latent_dist.sample().detach()
-            * vae.config.scaling_factor
-        )
+        torchdata = torch.from_numpy(self.npimage).permute(2, 0, 1).unsqueeze(0)
+        with torch.no_grad():
+            self.latent = (
+                vae.encode(torchdata).latent_dist.sample().detach()
+                * vae.config.scaling_factor
+            )
         return self.latent
 
     def get_text(self):

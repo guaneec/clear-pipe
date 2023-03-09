@@ -17,5 +17,17 @@ sd:
 
 trainer:
   accelerator: auto
-
+  callbacks:
+    - class_path: SampleCallback
+      init_args:
+        img_params_shared:
+          negative_prompt: 'worst quality'
+        txt2img_params:
+        - prompt: 'Hiori Kazano, Rarity SSR, 1girl, solo, black hair, mole under mouth, mole, blurry background, looking at viewer, long hair, blurry, bangs, ponytail, outdoors, smile, sky, upper body, black shirt, shirt, closed mouth, depth of field, day, black eyes, purple eyes, blue sky'
+        - prompt: 'Hiori Kazano, Rarity SSR, 1girl, solo, black hair, mole under mouth, mole, blurry background, looking at viewer, long hair, blurry, bangs, ponytail, outdoors, smile, sky, upper body, black shirt, shirt, closed mouth, depth of field, day, black eyes, purple eyes, blue sky'
+        - prompt: 'Hiori Kazano, Rarity SSR, 1girl, solo, black hair, mole under mouth, mole, blurry background, looking at viewer, long hair, blurry, bangs, ponytail, outdoors, smile, sky, upper body, black shirt, shirt, closed mouth, depth of field, day, black eyes, purple eyes, blue sky'
+          seed: 87
+        - prompt: 'Hiori Kazano, Rarity SSR, 1girl, solo, black hair, mole under mouth, mole, blurry background, looking at viewer, long hair, blurry, bangs, ponytail, outdoors, smile, sky, upper body, black shirt, shirt, closed mouth, depth of field, day, black eyes, purple eyes, blue sky'
+          seed: 88
+        every_n_steps: 100
 optimizer: AdamW

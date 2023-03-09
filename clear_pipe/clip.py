@@ -412,7 +412,7 @@ class PatchedCLIPTextModel(torch.nn.Module):
         # penultimate only applies on sd1 openai-clip with 12 layers
         assert self.text_model.config.num_hidden_layers == 12
         c = self.text_model(tokens.to(dev), output_hidden_states=True).hidden_states[-2]
-        return self.text_model.final_layer_norm(c)
+        return self.text_model.text_model.final_layer_norm(c)
 
     def process_texts(self, texts):
         """
